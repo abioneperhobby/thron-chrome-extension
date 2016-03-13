@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>ChatServer testsuite</title>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+<script>
+/*global browser, $*/
+var domain = 'thron.com';
+var csHosts = {
+	'DEV': 'localhost:8081',
+	'QA01': 'dev-push.' + domain,
+	'AWS04': 'test-push.' + domain,
+	'AWSB04': 'betathron-push.' + domain,
+	'AWSQ04': 'thronqa-push.' + domain,
+};
+var socketIoPath = '/api/chatserver/socket.io/socket.io.js';
+
+$(document).ready( function() {
+	$('#loadSocketIo').click(function() {
+		var env = $('#env').val();
+		$('#loadSocketIo').prop("disabled", true);
+
+		var chatServerHost = 'http://' + csHosts[env];
+
+		loadSocketIo(chatServerHost);
+	});
+
+	function loadSocketIo(csHost) {
+		$.getScript(csHost + socketIoPath)
+			.done(function () {
+				var username = $("#username").val();
+				var clientId = $("#clientId").val();
+				var tokenId = $("#tokenId").val();
+				/**
+				 * SOCKET MESSAGES SENT FROM BROWSER TO CHAT SERVER
+				 */
+					//set user login data
+				$("#setUserBtn").click( function() {
+					username = $("#username").val();
+					clientId = $("#clientId").val();
+					tokenId = $("#tokenId").val();
+					var isApp = $("#isApp").prop("checked");
+					//$("setUserBtn").attr("value", "disabled");
+					document.getElementById("setUserBtn").value = "Press CTRL+F5 to start another session";
+					$("#setUserBtn").attr("disabled", "disabled");
+					$("#username").attr("disabled", "disabled");
+					$("#clientId").attr("disabled", "disabled");
+					$("#tokenId").attr("disabled", "disabled");
+
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'tokenId': tokenId
+						, "isApp": isApp
+					}
+					};
+					socket.emit( 'clientReady', data );
+				});
+
+
+				//disconnect
+				$("#disconnectBtn").click( function() {
+					var data = $("#disconnectMsg").val();
+					//socket.emit('disconnect', data);
+					socket.disconnect();
+				});
+
+				//set user status
+				$("#setStatusBtn").click( function() {
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'status': $("#userStatus").val()
+						, 'statusMsg': $("#userStatusMsg").val()
+					}
+					};
+					socket.emit( 'setStatus', data );
+				});
+
+				//notify user's typing something
+				$("#setActionBtn").click( function() {
+					var data = { 'headers': {}, 'payload': {'username': username
+						, 'clientId': clientId
+						, 'action': $("#actionId").val()
+						, 'chatSessionId': $("#actionChatSessionId").val() }};
+					socket.emit( 'sendUserAction', data );
+				});
+
+				//get recent sessions
+				$("#getChatSessionsBtn").click( function() {
+					socket.emit( 'getChatSessions', {'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'offset': parseInt($("#getChatSessionsOffset").val(), 10)
+						, 'numOfRes': parseInt($("#getChatSessionsNumOfRes").val(), 10)
+						, 'offsetMsg': parseInt($("#getChatSessionsOffsetMsg").val(), 10)
+						, 'numOfResMsg': parseInt($("#getChatSessionsNumOfResMsg").val(), 10)
+					}
+					} );
+				});
+
+				//search
+				$("#searchBtn").click( function() {
+					var sessionIds = null;
+					if ($("#searchSessionIdsId").val().length > 0) {
+						sessionIds = JSON.parse( $("#searchSessionIdsId").val() );
+					}
+
+					var sessionAges = null;
+					if ($("#sessionAges").val().length > 0) {
+						sessionAges = JSON.parse( $("#sessionAges").val() );
+					}
+
+					var textSearch = null;
+					if ($("#textSearchCheckId").attr("checked")) {
+						textSearch = { "searchKey": $("#searchSearchKeyId").val(),
+							"sesTypes": JSON.parse($("#searchSesTypesId").val()),
+							"locale": $("#searchLocaleId").val() }
+					}
+					socket.emit( 'findByProperties', {'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, "criteria": {
+							"textSearch": textSearch,
+							"sessionIds": sessionIds,
+							"fromDate": $("#searchFromDateId").val(),
+							"toDate": $("#searchToDateId").val(),
+							"sessionAges": sessionAges
+						}
+						, 'offset': parseInt($("#searchOffsetId").val(), 10)
+						, 'numOfRes': parseInt($("#searchNumOfResId").val(), 10)
+						, 'offsetMsg': parseInt($("#searchOffsetMsgId").val(), 10)
+						, 'numOfResMsg': parseInt($("#searchNumOfResMsgId").val(), 10)
+					}
+					} );
+				});
+
+				//get archived sessions
+				$("#getArchivedSessionsBtn").click( function() {
+					socket.emit( 'getArchivedSessions', {'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'offset': parseInt($("#getArchivedSessionsOffset").val(), 10)
+						, 'numOfRes': parseInt($("#getArchivedSessionsNumOfRes").val(), 10)
+						, 'offsetMsg': parseInt($("#getArchivedSessionsOffsetMsg").val(), 10)
+						, 'numOfResMsg': parseInt($("#getArchivedSessionsNumOfResMsg").val(), 10)
+					}
+					} );
+				});
+
+				//get recent chat messages given its chat session id
+				$("#getChatMessagesBtn").click( function() {
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'chatSessionId': $("#getChatMessagesChatId").val()
+						, 'offset': parseInt($("#getChatMessagesOffset").val(), 10)
+						, 'numOfRes': parseInt($("#getChatMessagesNumOfRes").val(), 10)
+					}};
+					socket.emit( 'getChatMessages', data );
+				});
+
+				//create a new chat given its members
+				$("#create-chatByMembersBtn").click( function() {
+					var members = null;
+					if ($("#create-chat-members").val() && $("#create-chat-members").val().length > 1)
+						members = JSON.parse( $("#create-chat-members").val() );
+					var title = $("#create-chat-title").val();
+					var desc = $("#create-chat-desc").val();
+					var data = { 'headers': {}, 'payload': {'username': username
+						, 'clientId': clientId
+						, 'title': title
+						, 'desc': desc
+						, 'members': members
+					}};
+					//was session type specified?
+					if ($("#create-chat-type").val() && $("#create-chat-type").val().length > 0) {
+						data.payload.sesType =  $("#create-chat-type").val();
+					}
+					socket.emit('createChat', data);
+				});
+
+				//get chat users
+				$("#getChatUsersBtn").click( function() {
+					var usernames = null;
+					if ($("#getChatUsersUsernames").val() && $("#getChatUsersUsernames").val().length > 1)
+						usernames = JSON.parse( $("#getChatUsersUsernames").val() );
+					var data = { 'headers': {}
+						, 'payload': {
+							'username': username
+							, 'clientId': clientId
+							, 'offset': parseInt($("#getChatUsersOffset").val(), 10)
+							, 'numOfRes': parseInt($("#getChatUsersNumOfRes").val(), 10)
+							, 'usernames': usernames
+						}
+					};
+					socket.emit('getChatUsers', data);
+				});
+
+				//get aggregated users & sessions
+				$("#getAggregatedBtn").click( function() {
+					var offset = parseInt($("#getAggregatedOffset").val(), 10);
+					var offsetMsg = parseInt($("#getAggregatedOffsetMsg").val(), 10);
+					var offsetUsers = parseInt($("#getAggregatedOffsetUsers").val(), 10);
+					var numOfRes = parseInt($("#getAggregatedNumOfRes").val(), 10);
+					var numOfResMsg = parseInt($("#getAggregatedNumOfResMsg").val(), 10);
+					var numOfResUsers = parseInt($("#getAggregatedNumOfResUsers").val(), 10);
+
+					var data = { 'headers': {}, 'payload': {'username': username, 'clientId': clientId
+						, offset: offset
+						, offsetMsg: offsetMsg
+						, offsetUsers: offsetUsers
+						, numOfRes: numOfRes
+						, numOfResMsg: numOfResMsg
+						, numOfResUsers: numOfResUsers
+					}};
+					socket.emit('getAggregatedUsersSessions', data);
+				});
+
+				//set chat details
+				$("#setChatDetailBtn").click( function() {
+					var title = $("#chatTitle").val();
+					var desc = $("#chatDesc").val();
+					var chatSessionId = $("#detailsChatSessionId").val();
+					var data = { 'headers': {}, 'payload': {'username': username
+						, 'clientId': clientId
+						, 'title': title
+						, 'desc': desc
+						, 'chatSessionId': chatSessionId
+					}};
+					socket.emit('setChatDetails', data);
+				});
+
+				//Add member(s) to chat session
+				$("#addMembersToChatBtn").click( function() {
+					var members = null;
+					if ($("#addMembersToChat-members").val() && $("#addMembersToChat-members").val().length > 1)
+						members = JSON.parse( $("#addMembersToChat-members").val() );
+					var chatSessionId = $("#addMembersToChat-chatSessionId").val();
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'chatSessionId': chatSessionId
+						, 'members': members
+					}};
+					socket.emit('addMembers', data);
+				});
+
+				//leave a chat given current username
+				$("#leave-chatByUsernameBtn").click( function() {
+					var chatSessionId = $("#leave-chatByUsername").val();
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'chatSessionId': chatSessionId
+					}};
+					socket.emit('leaveChat', data);
+				});
+
+				//un/star a chat given its ID
+				$("#unstar-chatByIdBtn").click( function() {
+					var chatSessionIds = null;
+					if ($("#unstar-chatById").val() && $("#unstar-chatById").val().length > 1)
+						chatSessionIds = JSON.parse( $("#unstar-chatById").val() );
+					var starred = !!$("#unstar-starredId").attr("checked")
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'chatSessionIds': chatSessionIds
+						, 'starred': starred
+					}};
+					socket.emit('starSessions', data);
+				});
+
+				//un/archive chat by IDs
+				$("#archiveChatByIdsBtn").click( function() {
+					var chatSessionIds = JSON.parse( $("#archiveChatByIds").val() );
+					var archived = !!$("#archivedId").attr("checked")
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'chatSessionIds': chatSessionIds
+						, 'archived': archived
+					}};
+					socket.emit('archiveSessions', data);
+				});
+
+				//mark messages read
+				$("#msgReadBtn").click( function() {
+					var messages = null;
+					if ($("#markMessages").val() && $("#markMessages").val().length > 1)
+						messages = JSON.parse( $("#markMessages").val() );
+					var chatSessionId = $("#markChatSessionId").val();
+					var data = { 'headers': {}
+						, 'payload': {
+							'username': username
+							, 'clientId': clientId
+							, 'chatSessionId': chatSessionId
+							, 'messages': messages
+						}
+					};
+					socket.emit('markMsgRead', data);
+				});
+
+				//mark session read
+				$("#sessionReadBtn").click( function() {
+					var chatSessionId = $("#markSessionId").val();
+					var data = { 'headers': {}
+						, 'payload': {
+							'username': username
+							, 'clientId': clientId
+							, 'chatSessionId': chatSessionId
+						}
+					};
+					socket.emit('markSessionRead', data);
+				});
+
+				//mark all sessions read
+				$("#allSessionsReadBtn").click( function() {
+					var data = { 'headers': {}
+						, 'payload': {
+							'username': username
+							, 'clientId': clientId
+						}
+					};
+					socket.emit('markAllSessionsRead', data);
+				});
+
+				//edit messages
+				$("#msgEditBtn").click( function() {
+					var messageId = $("#editMessage").val();
+					var chatSessionId = $("#editChatSessionId").val();
+					var newContent = $("#editContent").val();
+					var data = { 'headers': {}
+						, 'payload': {
+							'username': username
+							, 'clientId': clientId
+							, 'chatSessionId': chatSessionId
+							, 'msgId': messageId
+							, 'content': newContent
+						}
+					};
+					socket.emit('editMsg', data);
+				});
+
+				//remove messages
+				$("#msgRemoveBtn").click( function() {
+					var messageId = $("#removeMessage").val();
+					var chatSessionId = $("#removeChatSessionId").val();
+					var data = { 'headers': {}
+						, 'payload': {
+							'username': username
+							, 'clientId': clientId
+							, 'chatSessionId': chatSessionId
+							, 'msgId': messageId
+						}
+					};
+					socket.emit('removeMsg', data);
+				});
+
+				//send messages
+				$("#msgSendBtn").click( function() {
+					var msg = $("#sendMsgContent").val();
+					var chatSessionId = $("#sendMsgChatSessionId").val();
+					var data = { 'headers': {}, 'payload': {
+						'username': username
+						, 'clientId': clientId
+						, 'chatSessionId': chatSessionId
+						, 'msg': msg
+					}};
+					($("#msgTypeId").val().length > 0) ? data.msgType = $("#msgTypeId").val() : null;
+					socket.emit('sendMsg', data);
+				});
+
+				/**
+				 * once all pieces are in place, let the server know we are ready
+				 */
+				var options = {resource: "api/chatserver/socket.io", 'sync disconnect on unload': true};
+
+				if (navigator.userAgent.indexOf('Safari') != -1 && navigator.userAgent.indexOf('Chrome') == -1) {
+					options.transports = ['xhr-polling'];
+				}
+
+				var socket = io.connect(csHost, options);
+
+				/**
+				 * SOCKET MESSAGES SENT FROM CHAT SERVER TO BROWSER
+				 */
+				socket.on('serverReady', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#serverReady").append( "<br> server startup. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						$("#serverReady").append("<br> Server is ready: version "+data.payload.version);
+					}
+				});
+
+				/* sever sent list of recent messages upon connection of client */
+				socket.on('recentSessions', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#recentSessionsByUser").append( "<br><b><u> Recent sessions with unread count.<b></u> resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br><b>sessions count: </b>" + data.payload.count;
+						for (var i=0; i < data.payload.sessions.length; i++) {
+							output += "<br> <b>session</b> #"+i+" : "+ data.payload.sessions[i].chatSessionId
+								+ ", unread count: " +data.payload.sessions[i].unreadCount
+								+" , type: "+data.payload.sessions[i].sessionType
+								+" , title: "+data.payload.sessions[i].title
+								+" , desc: "+data.payload.sessions[i].desc
+								+" , userThatLeftForLast: "+ JSON.stringify(data.payload.sessions[i].userThatLeftForLast)
+								+" , starred: "+data.payload.sessions[i].starred
+							var membrs = ", <br> <b>members</b>: ";
+							for (var k=0; k < data.payload.sessions[i].members.length; k++) {
+								membrs += "  <br>-- member: " + data.payload.sessions[i].members[k].username
+									+ ', clientId '+ data.payload.sessions[i].members[k].clientId
+									+ ', fullName '+ data.payload.sessions[i].members[k].fullName
+									+ ', avatarURL '+ data.payload.sessions[i].members[k].avatarURL
+									+ ', online '+ data.payload.sessions[i].members[k].online
+									+ ', lastSeen '+ data.payload.sessions[i].members[k].lastSeen
+									+ ', status '+ data.payload.sessions[i].members[k].status
+									+ ', statusMsg '+ data.payload.sessions[i].members[k].statusMsg
+							}
+							output += membrs;
+							var msgs = ", <br> <b>messages</b>: ";
+							output += "<br><b>messages count: </b>" + data.payload.sessions[i].count;
+							for (var j=0; j < data.payload.sessions[i].messages.length; j++) {
+								msgs += "  <br>-- id: " + data.payload.sessions[i].messages[j].chatMsgId
+									+ ", in session: " + data.payload.sessions[i].messages[j].chatSessionId
+									+ ", sender: " + data.payload.sessions[i].messages[j].sender
+									+ ", sent_ts: " + data.payload.sessions[i].messages[j].sent_ts
+									+ ", read: " + data.payload.sessions[i].messages[j].read
+									+ ", read_ts: " + data.payload.sessions[i].messages[j].read_ts
+									+ ", status: " + data.payload.sessions[i].messages[j].status
+									+ ", content: " + data.payload.sessions[i].messages[j].content
+							}
+							output += msgs; output += "<br><br>";
+						}
+						$("#recentSessionsByUser").text( " --- Recent sessions ---");
+						$("#recentSessionsByUser").append(output);
+					}
+				});
+
+				/* sever sent list of search results */
+				socket.on('searchResults', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#searchResultsId").append( "<br><b><u> Recent sessions with unread count.<b></u> resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br><b>sessions count: </b>" + data.payload.count;
+						for (var i=0; i < data.payload.sessions.length; i++) {
+							output += "<br> <b>session</b> #"+i+" : "+ data.payload.sessions[i].chatSessionId
+								+ ", unread count: " +data.payload.sessions[i].unreadCount
+								+" , type: "+data.payload.sessions[i].sessionType
+								+" , title: "+data.payload.sessions[i].title
+								+" , desc: "+data.payload.sessions[i].desc
+								+" , userThatLeftForLast: "+ JSON.stringify(data.payload.sessions[i].userThatLeftForLast)
+								+" , starred: "+data.payload.sessions[i].starred
+							var membrs = ", <br> <b>members</b>: ";
+							for (var k=0; k < data.payload.sessions[i].members.length; k++) {
+								membrs += "  <br>-- member: " + data.payload.sessions[i].members[k].username
+									+ ', clientId '+ data.payload.sessions[i].members[k].clientId
+									+ ', fullName '+ data.payload.sessions[i].members[k].fullName
+									+ ', avatarURL '+ data.payload.sessions[i].members[k].avatarURL
+									+ ', online '+ data.payload.sessions[i].members[k].online
+									+ ', lastSeen '+ data.payload.sessions[i].members[k].lastSeen
+									+ ', status '+ data.payload.sessions[i].members[k].status
+									+ ', statusMsg '+ data.payload.sessions[i].members[k].statusMsg
+							}
+							output += membrs;
+							var msgs = ", <br> <b>messages</b>: ";
+							output += "<br><b>messages count: </b>" + data.payload.sessions[i].count;
+							for (var j=0; j < data.payload.sessions[i].messages.length; j++) {
+								msgs += "  <br>-- id: " + data.payload.sessions[i].messages[j].chatMsgId
+									+ ", in session: " + data.payload.sessions[i].messages[j].chatSessionId
+									+ ", sender: " + data.payload.sessions[i].messages[j].sender
+									+ ", sent_ts: " + data.payload.sessions[i].messages[j].sent_ts
+									+ ", read: " + data.payload.sessions[i].messages[j].read
+									+ ", read_ts: " + data.payload.sessions[i].messages[j].read_ts
+									+ ", status: " + data.payload.sessions[i].messages[j].status
+									+ ", content: " + data.payload.sessions[i].messages[j].content
+							}
+							output += msgs; output += "<br><br>";
+						}
+						$("#searchResultsId").text( " --- Found sessions ---");
+						$("#searchResultsId").append(output);
+					}
+				});
+
+				/* sever sent list of archived messages */
+				socket.on('archivedSessions', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#archivedSessionsByUser").append( "<br><b><u> Archived sessions with unread count.<b></u> resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br><b>sessions count: </b>" + data.payload.count;
+						for (var i=0; i < data.payload.sessions.length; i++) {
+							output += "<br> <b>session</b> #"+i+" : "+ data.payload.sessions[i].chatSessionId
+								+ ", unread count: " +data.payload.sessions[i].unreadCount
+								+" , type: "+data.payload.sessions[i].sessionType
+								+" , title: "+data.payload.sessions[i].title
+								+" , desc: "+data.payload.sessions[i].desc
+								+" , userThatLeftForLast: "+ JSON.stringify(data.payload.sessions[i].userThatLeftForLast)
+								+" , starred: "+data.payload.sessions[i].starred
+							var membrs = ", <br> <b>members</b>: ";
+							for (var k=0; k < data.payload.sessions[i].members.length; k++) {
+								membrs += "  <br>-- member: " + data.payload.sessions[i].members[k].username
+									+ ', clientId '+ data.payload.sessions[i].members[k].clientId
+									+ ', fullName '+ data.payload.sessions[i].members[k].fullName
+									+ ', avatarURL '+ data.payload.sessions[i].members[k].avatarURL
+									+ ', online '+ data.payload.sessions[i].members[k].online
+									+ ', lastSeen '+ data.payload.sessions[i].members[k].lastSeen
+									+ ', status '+ data.payload.sessions[i].members[k].status
+									+ ', statusMsg '+ data.payload.sessions[i].members[k].statusMsg
+							}
+							output += membrs;
+							var msgs = ", <br> <b>messages</b>: ";
+							output += "<br><b>messages count: </b>" + data.payload.sessions[i].count;
+							for (var j=0; j < data.payload.sessions[i].messages.length; j++) {
+								msgs += "  <br>-- id: " + data.payload.sessions[i].messages[j].chatMsgId
+									+ ", in session: " + data.payload.sessions[i].messages[j].chatSessionId
+									+ ", sender: " + data.payload.sessions[i].messages[j].sender
+									+ ", sent_ts: " + data.payload.sessions[i].messages[j].sent_ts
+									+ ", read: " + data.payload.sessions[i].messages[j].read
+									+ ", read_ts: " + data.payload.sessions[i].messages[j].read_ts
+									+ ", status: " + data.payload.sessions[i].messages[j].status
+									+ ", content: " + data.payload.sessions[i].messages[j].content
+							}
+							output += msgs; output += "<br><br>";
+						}
+						$("#archivedSessionsByUser").text( " --- Archived sessions ---");
+						$("#archivedSessionsByUser").append(output);
+					}
+				});
+
+				/* sever sent list of recent message upon connection of client */
+				socket.on('statusChanged', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#userStatusLog").append( "<br> Status changed. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						$("#userStatusLog").append( "<br> Status changed to: "
+							+ "username: " + data.payload.username
+							+ ", clientId: " + data.payload.clientId
+							+ ", online: " + data.payload.online
+							+ ", lastSeen: " + data.payload.lastSeen
+							+ ", fullName: " + data.payload.fullName
+							+ ", status: " + data.payload.status
+							+ ", statusMsg: " + data.payload.statusMsg );
+					}
+				});
+
+				/* sever sent ack of update for user details */
+				socket.on('userDetailsUpdated', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#userDetailsLog").append( "<br> User details update. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						$("#userDetailsLog").append( "<br> User details updated to: " +  data.payload.fullName + " and URL " + data.payload.avatarURL);
+						$("#fullName").val(data.payload.fullName);
+						$("#avatarURL").val(data.payload.avatarURL);
+					}
+				});
+
+				/* sever sent list of chat users details */
+				socket.on('chatUsers', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#chatUsers").append( "<br> Chat Users listing. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br> Chat users: <br>";
+						output += "<b>users count: </b>" + data.payload.count + "<br>";
+						for (var i=0; i < data.payload.users.length; i++) {
+							output += " <b>username: </b>"+data.payload.users[i].username+", clientID: "+data.payload.users[i].clientId
+								+", online: "+data.payload.users[i].online+", lastSeen: "+data.payload.users[i].lastSeen
+								+", fullName: "+data.payload.users[i].fullName+", avatarURL: "+data.payload.users[i].avatarURL
+								+", status: "+data.payload.users[i].status+", statusMsg: "+data.payload.users[i].statusMsg
+								+"<br>";
+						}
+						$("#chatUsers").append(output);
+					}
+				});
+
+				/* sever sent list of chat users details && list of preferred sessions */
+				socket.on('aggregatedUsersSessions', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#aggregated").append( "<br> Aggregated user & sessions listing. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br><b><u> Aggregated users: </u></b><br>";
+						output += "<b>users count: </b>" + data.payload.users.count + "<br>";
+						for (var i=0; i < data.payload.users.users.length; i++) {
+							output += " username: "+data.payload.users.users[i].username+", clientID: "+data.payload.users.users[i].clientId
+								+", online: "+data.payload.users.users[i].online+", lastSeen: "+data.payload.users.users[i].lastSeen
+								+", fullName: "+data.payload.users.users[i].fullName+", avatarURL: "+data.payload.users.users[i].avatarURL
+								+", status: "+data.payload.users.users[i].status+", statusMsg: "+data.payload.users.users[i].statusMsg
+								+"<br>";
+						}
+						output += "<b><u> Aggregated sessions: </u></b><br>";
+						output += "<b>session count: </b>" + data.payload.sessions.count;
+						for (var i=0; i < data.payload.sessions.sessions.length; i++) {
+							output += "<br> <b>session</b> #"+i+" : "+ data.payload.sessions.sessions[i].chatSessionId
+								+ ", unread count: " +data.payload.sessions.sessions[i].unreadCount
+								+" , type: "+data.payload.sessions.sessions[i].sessionType
+								+" , title: "+data.payload.sessions.sessions[i].title
+								+" , desc: "+data.payload.sessions.sessions[i].desc
+								+" , userThatLeftForLast: "+ JSON.stringify(data.payload.sessions.sessions[i].userThatLeftForLast)
+								+" , starred: "+data.payload.sessions.sessions[i].starred
+							var membrs = ", <br> <b>members</b>: ";
+							for (var k=0; k < data.payload.sessions.sessions[i].members.length; k++) {
+								membrs += "<br>--- member: " + data.payload.sessions.sessions[i].members[k].username
+									+ ', clientId '+ data.payload.sessions.sessions[i].members[k].clientId
+									+ ', fullName '+ data.payload.sessions.sessions[i].members[k].fullName
+									+ ', avatarURL '+ data.payload.sessions.sessions[i].members[k].avatarURL
+									+ ', online '+ data.payload.sessions.sessions[i].members[k].online
+									+ ', lastSeen '+ data.payload.sessions.sessions[i].members[k].lastSeen
+									+ ', status '+ data.payload.sessions.sessions[i].members[k].status
+									+ ', statusMsg '+ data.payload.sessions.sessions[i].members[k].statusMsg
+							}
+							output += membrs;
+							output += "<br><b>messages count: </b>" + data.payload.sessions.sessions[i].count;
+							var msgs = ", <br> <b>messages</b>: ";
+							for (var j=0; j < data.payload.sessions.sessions[i].messages.length; j++) {
+								msgs += "<br>----- id: " + data.payload.sessions.sessions[i].messages[j].chatMsgId
+									+ ", in session: " + data.payload.sessions.sessions[i].messages[j].chatSessionId
+									+ ", sender: " + data.payload.sessions.sessions[i].messages[j].sender
+									+ ", sent_ts: " + data.payload.sessions.sessions[i].messages[j].sent_ts
+									+ ", read: " + data.payload.sessions.sessions[i].messages[j].read
+									+ ", read_ts: " + data.payload.sessions.sessions[i].messages[j].read_ts
+									+ ", status: " + data.payload.sessions.sessions[i].messages[j].status
+									+ ", content: " + data.payload.sessions.sessions[i].messages[j].content
+							}
+							output += msgs;
+							output += "<br>";
+						}
+						$("#aggregated").text( " --- aggregated sessions ---");
+						$("#aggregated").append(output);
+					}
+				});
+
+				//server sent messages of given chat id
+				socket.on('recentMessages', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#recentMessagesByChatSession").append( "<br> Recent chat sessions messages. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<b><u>Messages: </u></b><br>";
+						output += "<b>messages count: </b>" + data.payload.count
+						for (var j=0; j < data.payload.messages.length; j++) {
+							output += "<br> id: " + data.payload.messages[j].chatMsgId
+								+ " in session " + data.payload.messages[j].chatSessionId
+								+ ", sender: " + data.payload.messages[j].sender
+								+ ", sent_ts: " + data.payload.messages[j].sent_ts
+								+ ", read: " + data.payload.messages[j].read
+								+ ", read_ts: " + data.payload.messages[j].read_ts
+								+ ", status: " + data.payload.messages[j].status
+								+ ", content: " + data.payload.messages[j].content
+								+ ", status: " + data.payload.messages[j].status
+						}
+
+						$("#recentMessagesByChatSession").text( "<br>");
+						$("#recentMessagesByChatSession").append(output);
+					}
+				});
+
+				socket.on('chatCreated', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#chatId").append( "<br> Couldn't create chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br> <b>Chat Session Details:</b> ";
+						output += "<br>ID: " + data.payload.chatSessionId;
+						output += "<br>type: " + data.payload.sessionType;
+						output += "<br>title: " + data.payload.title;
+						output += "<br>desc: " + data.payload.desc;
+						output += "<br>starred: " + data.payload.starred;
+						output += "<br>creator: " + data.payload.creator;
+						output += "<br>created: " + data.payload.created_ts;
+						output += "<br>lastUpdated: " + data.payload.lastUpdated_ts;
+						var membrs = "";
+						for (var k=0; k < data.payload.members.length; k++) {
+							membrs += "<br>--- member: " + data.payload.members[k].username
+								+ ', clientId '+ data.payload.members[k].clientId
+								+ ', fullName '+ data.payload.members[k].fullName
+								+ ', avatarURL '+ data.payload.members[k].avatarURL
+								+ ', online '+ data.payload.members[k].online
+								+ ', lastSeen '+ data.payload.members[k].lastSeen
+								+ ', status '+ data.payload.members[k].status
+								+ ', statusMsg '+ data.payload.members[k].statusMsg
+						}
+						output += membrs;
+						$("#chatId").append(output);
+					}
+				});
+
+				socket.on('membersAdded', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#membersAdded").append( "<br> Couldn't add members to chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "Chat Session: <br>"
+							+ "ID: " + data.payload.session.chatSessionId
+							+", creator: " + data.payload.session.creator
+							+", title: " + data.payload.session.title
+							+", desc: " + data.payload.session.desc
+							+", lastUpdated_ts: " + data.payload.session.lastUpdated_ts
+						var membrs = "";
+						for (var k=0; k < data.payload.members.length; k++) {
+							membrs += "<br>--- member: " + data.payload.session.members[k].username
+								+ ', clientId '+ data.payload.session.members[k].clientId
+								+ ', fullName '+ data.payload.session.members[k].fullName
+								+ ', avatarURL '+ data.payload.session.members[k].avatarURL
+								+ ', online '+ data.payload.session.members[k].online
+								+ ', lastSeen '+ data.payload.session.members[k].lastSeen
+								+ ', status '+ data.payload.session.members[k].status
+								+ ', statusMsg '+ data.payload.session.members[k].statusMsg
+						}
+						output += ", members: " + members;
+						output += "<br><br>";
+						$("#membersAdded").append(output);
+					}
+				});
+
+				socket.on('chatDetailsSet', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#chatDetails").append( "<br> Couldn't set chat details. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "Chat Session ID: " + data.payload.chatSessionId;
+						output += ", Title: " + data.payload.title;
+						output += ", Desc: " + data.payload.desc + "<br>";
+						$("#chatDetails").append(output);
+					}
+				});
+
+				socket.on('chatLeft', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#leftChatId").append( "<br> Couldn't leave chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "Chat Session Left: <br>"
+							+ "ID: " + data.payload.session.chatSessionId
+							+", creator: " + data.payload.session.creator
+							+", title: " + data.payload.session.title
+							+", desc: " + data.payload.session.desc
+							+", userThatLeftForLast: " + JSON.stringify(data.payload.session.userThatLeftForLast);
+							+", lastUpdated_ts: " + data.payload.session.lastUpdated_ts;
+
+						var membrs = ", <br> <b>members</b>: ";
+						for (var k=0; k < data.payload.session.members.length; k++) {
+							membrs += "  <br>-- member: " + data.payload.session.members[k].username
+								+ ', clientId '+ data.payload.session.members[k].clientId
+								+ ', fullName '+ data.payload.session.members[k].fullName
+								+ ', avatarURL '+ data.payload.session.members[k].avatarURL
+								+ ', online '+ data.payload.session.members[k].online
+								+ ', lastSeen '+ data.payload.session.members[k].lastSeen
+								+ ', status '+ data.payload.session.members[k].status
+								+ ', statusMsg '+ data.payload.session.members[k].statusMsg
+						}
+						output += ", members: " + membrs;
+						output += "<br><br>";
+						$("#leftChatId").append(output);
+					}
+				});
+
+				socket.on('sessionsStarred', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#unstarredChatId").append( "<br> Couldn't un/star chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "Un/Starred Chat Session ID: " + data.payload.chatSessionIds +" <br>";
+						$("#unstarredChatId").append(output);
+					}
+				});
+
+				socket.on('msgMarkedRead', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#markedMsg").append( "<br> Couldn't mark message(s) as read for chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br> Marked "+data.payload.msgCount+" messages as read <br>";
+						var msgIds = "";
+						for (var k=0; k < data.payload.messageIds.length; k++) {
+							msgIds += "<br>" + data.payload.messageIds[k];
+						}
+						output += msgIds;
+
+						$("#markedMsg").append(output);
+					}
+				});
+
+				socket.on('sessionMarkedRead', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#markedSession").append( "<br> Couldn't mark session as read. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br> Marked session "+ data.payload.chatSessionId +" as read <br>";
+						$("#markedSession").append(output);
+					}
+				});
+
+				socket.on('allSessionsMarkedRead', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#markedAllSessions").append( "<br> Couldn't mark all sessions as read. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br> Marked all sessions as read:";
+						var chatIds = "";
+						for (var k=0; k < data.payload.chatSessionIds.length; k++) {
+							chatIds += "<br>" + data.payload.chatSessionIds[k];
+						}
+						output += chatIds;
+						$("#markedAllSessions").append(output);
+					}
+				});
+
+				socket.on('msgEdited', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#editedMsg").append( "<br> Couldn't edit message for chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br>Edited message ";
+						output += "<br> id: " + data.payload.message.chatMsgId
+							+ ", sender: " + data.payload.message.sender
+							+ ", sent_ts: " + data.payload.message.sent_ts
+							+ ", read: " + data.payload.message.read
+							+ ", read_ts: " + data.payload.message.read_ts
+							+ ", status: " + data.payload.message.status
+							+ ", content: " + data.payload.message.content
+						$("#editedMsg").append(output);
+					}
+				});
+
+				socket.on('msgRemoved', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#removedMsg").append( "<br> Couldn't remove message for chat session. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<br>Edited message ";
+						output += "<br> id: " + data.payload.message.chatMsgId
+							+ ", sender: " + data.payload.message.sender
+							+ ", sent_ts: " + data.payload.message.sent_ts
+							+ ", read: " + data.payload.message.read
+							+ ", read_ts: " + data.payload.message.read_ts
+							+ ", status: " + data.payload.message.status
+							+ ", content: " + data.payload.message.content
+						$("#removedMsg").append(output);
+					}
+				});
+
+				socket.on('userAction', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#userActions").append( "<br> Couldn't complete broadcast of user's action. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "At "+data.payload.ts+" user "+data.payload.username+" is "+data.payload.action+" in chat session "+data.payload.chatSessionId+"<br>";
+						$("#userActions").append(output);
+					}
+				});
+
+				socket.on('chatMsg', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#chatMessages").append( "<br> Couldn't send message(s). resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "<b>Msg with ID </b>" + data.payload.chatMsgId
+							+ " from " + data.payload.sender
+							+ " in session " + data.payload.chatSessionId
+							+ " read  "+data.payload.read
+							+ " read_ts  "+data.payload.read_ts
+							+ " at "+data.payload.sent_ts
+							+" status "+data.payload.status
+							+" content: "+data.payload.content;
+
+						if (data.payload.receivers) {
+							var receivers = "<br>receivers: ";
+							for (var k=0; k < data.payload.receivers.length; k++) {
+								if (data.payload.receivers[k].distListId) {
+									receivers += "distListId: " + data.payload.receivers[k].distListId + ", ";
+								} else if (data.payload.receivers[k].user && data.payload.receivers[k].user.username) {
+									receivers += "user: " + data.payload.receivers[k].user.username + ", ";
+								}
+							}
+							output += receivers;
+						}
+
+						output += "<br>";
+						$("#chatMessages").append(output);
+					}
+				});
+
+				socket.on('userOnline', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#userStatusLog").append("<br>User couldn't get online. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "User online! "
+							+"Username: "+data.payload.username
+							+", clientID: "+data.payload.clientId
+							+", fullName: "+data.payload.fullName
+							+", avatarURL: "+data.payload.avatarURL
+							+", lastSeen: "+data.payload.lastSeen
+							+", status: "+data.payload.status
+							+", statusMsg: "+data.payload.statusMsg
+							+"<br>";
+						$("#userStatusLog").append(output);
+					}
+				});
+
+				socket.on('categoryUnshared', function(data) {
+					var output = "Category unshared: " + data.payload.category.id
+					+"<br>";
+					$("#categoryEvents").append(output);
+				});
+
+				socket.on('categoryDeleted', function(data) {
+					var output = "Category deleted: " + data.payload.category.id
+					+"<br>";
+					$("#categoryEvents").append(output);
+				});
+
+				socket.on('userDisconnected', function(data) {
+					if (data.resultCode !== "OK") {
+						$("#userStatusLog").append("<br>User couldn't disconnect properly. resultCode: " + data.resultCode + "; errorDescription: " + data.errorDescription);
+					} else {
+						var output = "User disconnected! Username: "+data.payload.username+", clientID: "+data.payload.clientId
+							+"<br>";
+						$("#userStatusLog").append(output);
+					}
+				});
+			});
+	}
+});
+</script>
+</head>
+<body>
+<!-- OUTPUT -->
+<h3>Server Status</h3>
+<div id="serverReady"></div>
+<hr>
+<h3>User Status </h3>
+<div id="userStatusLog"></div>
+<hr>
+<h3>User Details </h3>
+<div id="userDetailsLog"></div>
+<hr>
+<h3>Chat Users </h3>
+<div id="chatUsers"></div>
+<hr>
+<h3>Aggregated Users & Sessions</h3>
+<div id="aggregated"></div>
+<hr>
+<h3>System Notification Messages </h3>
+<div id="sysnotifMsg"></div>
+<hr>
+<h3>Recent Sessions</h3>
+<div id="recentSessionsByUser"></div>
+<hr>
+<h3>Archived Sessions</h3>
+<div id="archivedSessionsByUser"></div>
+<hr>
+<h3>Messages by chat session</h3>
+<div id="recentMessagesByChatSession"></div>
+<hr>
+<h3>Created Chat by Members</h3>
+<div id="chatId"></div>
+<hr>
+<h3>Chat Details</h3>
+<div id="chatDetails"></div>
+<hr>
+<h3>Members added by Chat Id</h3>
+<div id="membersAdded"></div>
+<hr>
+<h3>Left Chat by ID</h3>
+<div id="leftChatId"></div>
+<hr>
+<h3>Un/Starred Chat by ID</h3>
+<div id="unstarredChatId"></div>
+<hr>
+<h3>Message marked read</h3>
+<div id="markedMsg"></div>
+<hr>
+<h3>Session marked read</h3>
+<div id="markedSession"></div>
+<hr>
+<h3>All sessions marked read</h3>
+<div id="markedAllSessions"></div>
+<hr>
+<h3>Message edited</h3>
+<div id="editedMsg"></div>
+<hr>
+<h3>Message removed</h3>
+<div id="removedMsg"></div>
+<hr>
+<h3>User actions</h3>
+<div id="userActions"></div>
+<hr>
+<h3>Chat Messages</h3>
+<div id="chatMessages"></div>
+<hr>
+<h3>Search Results</h3>
+<div id="searchResultsId"></div>
+<hr>
+<h3>Category Events</h3>
+<div id="categoryEvents"></div>
+<hr><hr>
+<!-- INPUT -->
+<label for="env">Select ENV</label>
+<select id="env">
+	<option value="DEV">DEV</option>
+	<option value="QA01">QA01</option>
+	<option value="AWS04">AWS04</option>
+	<option value="AWSB04">AWSB04</option>
+	<option value="AWSQ04">AWSQ04</option>
+</select>
+<input type="button" value="Connect web-socket" id="loadSocketIo">
+<hr/>
+<b>
+	<input type="button" value="Start session with these details" id="setUserBtn">
+	username<input type="text" id="username" value="">
+	clientId<input type="text" id="clientId" value="">
+	tokenId<input type="text" id="tokenId" value="">
+	isApp? <input type="checkbox" value="isApp" id="isApp">
+</b>
+<input type="button" value="Disconnect" id="disconnectBtn">
+message<input type="text" id="disconnectMsg" value="bye bye!">
+<hr>
+<input type="button" value="Set user status" id="setStatusBtn">
+user status<input type="text" value="AVAILABLE" id="userStatus">
+user status message<input type="text" value="Pronto a chattare!" id="userStatusMsg">
+<hr>
+<input type="button" value="Get Chat Users" id="getChatUsersBtn">
+offset<input type="text" value="0" id="getChatUsersOffset">
+numOfRes<input type="text" value="10" id="getChatUsersNumOfRes">
+usernames<input type="text" value="[&quot;&quot;, &quot;&quot;]" id="getChatUsersUsernames">
+<hr>
+<input type="button" value="Get Aggregated Users & Sessions" id="getAggregatedBtn">
+offset<input type="text" value="0" id="getAggregatedOffset">
+numOfRes<input type="text" value="10" id="getAggregatedNumOfRes">
+offsetMsg<input type="text" value="0" id="getAggregatedOffsetMsg">
+numOfResMsg<input type="text" value="10" id="getAggregatedNumOfResMsg">
+offsetUsers<input type="text" value="0" id="getAggregatedoffsetUsers">
+numOfResUsers<input type="text" value="10" id="getAggregatedNumOfResUsers">
+<hr>
+<input type="button" value="Get recent chat sessions" id="getChatSessionsBtn">
+offset<input type="text" value="0" id="getChatSessionsOffset">
+numOfRes<input type="text" value="10" id="getChatSessionsNumOfRes">
+offsetMsg<input type="text" value="0" id="getChatSessionsOffsetMsg">
+numOfResMsg<input type="text" value="10" id="getChatSessionsNumOfResMsg">
+<hr>
+<input type="button" value="Get archived chat sessions" id="getArchivedSessionsBtn">
+offset<input type="text" value="0" id="getArchivedSessionsOffset">
+numOfRes<input type="text" value="10" id="getArchivedSessionsNumOfRes">
+offsetMsg<input type="text" value="0" id="getArchivedSessionsOffsetMsg">
+numOfResMsg<input type="text" value="10" id="getArchivedSessionsNumOfResMsg">
+<hr>
+<input type="button" value="Get chat messages by chat ID" id="getChatMessagesBtn">
+chatSessionId<input type="text" id="getChatMessagesChatId">
+offset<input type="text" value="0" id="getChatMessagesOffset">
+numOfRes<input type="text" value="10" id="getChatMessagesNumOfRes">
+<hr>
+<input type="button" value="Create chat by members" id="create-chatByMembersBtn">
+create-title<input type="text" id="create-chat-title" value="">
+create-desc<input type="text" id="create-chat-desc" value="">
+create-type<input type="text" id="create-chat-type" value="">
+create-members<input type="text" id="create-chat-members" value="[&quot;&quot;, &quot;&quot;]">
+<hr>
+<input type="button" value="Set chat details" id="setChatDetailBtn">
+details-title<input type="text" id="chatTitle" value="">
+details-desc<input type="text" id="chatDesc" value="">
+details-chatSessionId<input type="text" id="detailsChatSessionId" value="">
+<hr>
+<input type="button" value="Add member(s) to chat session" id="addMembersToChatBtn">
+members<input type="text" id="addMembersToChat-members" value="[&quot;&quot;]">
+chatSessionId<input type="text" id="addMembersToChat-chatSessionId" value="">
+<hr>
+<input type="button" value="Leave Chat" id="leave-chatByUsernameBtn">
+chatSessionId<input type="text" id="leave-chatByUsername">
+<hr>
+<input type="button" value="Un/Star chat session by IDs" id="unstar-chatByIdBtn">
+starred? <input type="checkbox" value="unstar-starred" id="unstar-starredId">
+chatSessionIds<input type="text" value="[&quot;&quot;, &quot;&quot;]" id="unstar-chatById">
+<hr>
+<input type="button" value="Un/Archive chat session by IDs" id="archiveChatByIdsBtn">
+archived? <input type="checkbox" value="archived" id="archivedId">
+chatSessionIds<input type="text" id="archiveChatByIds" value="[&quot;xxx&quot;, &quot;yyy&quot;]">
+<hr>
+<input type="button" value="Mark Message Read" id="msgReadBtn">
+chatSessionId<input type="text" id="markChatSessionId" value="">
+message ids<input type="text" id="markMessages" value="[&quot;&quot;, &quot;&quot;]">
+<hr>
+<input type="button" value="Mark Session Read" id="sessionReadBtn">
+chatSessionId<input type="text" id="markSessionId" value="">
+<hr>
+<input type="button" value="Mark All Sessions Read" id="allSessionsReadBtn">
+<hr>
+<input type="button" value="Edit Message" id="msgEditBtn">
+chatSessionId<input type="text" id="editChatSessionId" value="">
+message ID<input type="text" id="editMessage" value="">
+new content<input type="text" id="editContent" value="">
+<hr>
+<input type="button" value="Remove Message" id="msgRemoveBtn">
+chatSessionId<input type="text" id="removeChatSessionId" value="">
+message ID<input type="text" id="removeMessage" value="">
+<hr>
+<input type="button" value="Send User Action" id="setActionBtn">
+chatSessionId<input type="text" id="actionChatSessionId" value="">
+action<input type="text" id="actionId" value="TYPING">
+<hr>
+<input type="button" value="Send Message" id="msgSendBtn">
+chatSessionId<input type="text" id="sendMsgChatSessionId" value="">
+msgType<input type="text" id="msgTypeId" value="">
+message<input type="text" id="sendMsgContent" value="">
+<hr>
+<input type="button" value="Search" id="searchBtn">
+textSearch? <input type="checkbox" value="doTextSearch" id="textSearchCheckId">
+searchKey<input type="text" id="searchSearchKeyId" value="">
+sesTypes<input type="text" id="searchSesTypesId" value="[&quot;SYSNOTIF&quot;, &quot;ONETOONE&quot;, &quot;ONETOMANY&quot;]">
+sessionAges<input type="text" id="sessionAges" value="[&quot;RECENT&quot;, &quot;ARCHIVED&quot;]">
+locale<input type="text" id="searchLocaleId" value="IT">
+session IDs<input type="text" id="searchSessionIdsId" value="">
+fromDate<input type="text" id="searchFromDateId" value="">
+toDate<input type="text" id="searchToDateId" value="">
+offset<input type="text" value="0" id="searchOffsetId">
+numOfRes<input type="text" value="10" id="searchNumOfResId">
+offsetMsg<input type="text" value="0" id="searchOffsetMsgId">
+numOfResMsg<input type="text" value="10" id="searchNumOfResMsgId">
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+	"manifest_version": 2,
+
+	"name": "THRON Notifier",
+	"description": "This extension tells you when you have some notifies",
+	"version": "0.1",
+
+	"options_ui": {
+        "page": "options.html",
+        "chrome_style": true,
+        "open_in_tab": true
+      },
+
+	"browser_action": {
+		"default_icon": "icon.png",
+		"default_popup": "popup.html"
+	},
+	
+	"permissions": ["activeTab","storage","alarms"],
+	
+	"background": { "scripts": ["js/extra/jquery-1.11.3.min.js","js/chatserver/socket.io.js","js/chatserver/chatUtils.js","js/chatserver/backgroundEvents.js"]}
+	
+}
